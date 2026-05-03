@@ -668,7 +668,7 @@ Le champ "answer" est l'index (0, 1, 2 ou 3) de la bonne réponse.`;
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
+          model: "claude-3-5-sonnet-20241022",
           max_tokens: 2000,
           messages: [{ role: "user", content: [
             { type: "image", source: { type: "base64", media_type: imageMediaType, data: imageData } },
