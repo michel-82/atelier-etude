@@ -7,7 +7,7 @@ const SUBJECTS = {
   sciences: { name: 'Sciences', icon: FlaskConical, color: '#4a6fa5', accent: '#d4e0f0', isLanguage: false },
   anglais: { name: 'Anglais', icon: Languages, color: '#8b5a3c', accent: '#e8d5c4', isLanguage: true },
   allemand: { name: 'Allemand', icon: Languages, color: '#5d4e37', accent: '#e0d8c3', isLanguage: true },
-  histoire: { name: 'Histoire', icon: Landmark, color: '#7a4a3a', accent: '#ead5c8', isLanguage: false },
+  histoire: { name: 'Histoire', icon: Landmark, colohr: '#7a4a3a', accent: '#ead5c8', isLanguage: false },
   geographie: { name: 'Géographie', icon: Globe, color: '#3d6b8a', accent: '#cfdde8', isLanguage: false },
   religion: { name: 'Religion', icon: Cross, color: '#6b4a7a', accent: '#dccfe5', isLanguage: false },
 };
@@ -668,7 +668,7 @@ Le champ "answer" est l'index (0, 1, 2 ou 3) de la bonne réponse.`;
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-3-5-sonnet-20241022",
+          model: "claude-sonnet-4-5",
           max_tokens: 2000,
           messages: [{ role: "user", content: [
             { type: "image", source: { type: "base64", media_type: imageMediaType, data: imageData } },
