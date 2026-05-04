@@ -111,6 +111,7 @@ export default function App() {
   const [content, setContent] = useState(DEFAULT_CONTENT);
   const [stats, setStats] = useState({ totalQuizzes: 0, correctAnswers: 0, totalAnswers: 0, bySubject: {}, history: [] });
   const [assignments, setAssignments] = useState([]);
+  const [familyCode, setFamilyCode] = useState('');
   const [parentMode, setParentMode] = useState(false);
   const [pinSet, setPinSet] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -127,9 +128,19 @@ export default function App() {
     })();
   }, []);
 
+  useEffect(() => {
+    const code = localStorage.getItem(STORAGE_KEYS.FAMILY_CODE) || '';
+    setFamilyCode(code);
+    const refresh = async () => { if (!code) return; const remote = await cloudGet(code, null); if (remote) { setAssignments(remote); safeSet(STORAGE_KEYS.ASSIGNMENTS, remote); } };
+    refresh();
+    const onVis = () => { if (document.visibilityState === 'visible') refresh(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
+
   const updateContent = async (c) => { setContent(c); await safeSet(STORAGE_KEYS.CONTENT, c); };
   const updateStats = async (s) => { setStats(s); await safeSet(STORAGE_KEYS.STATS, s); };
-  const updateAssignments = async (a) => { setAssignments(a); await safeSet(STORAGE_KEYS.ASSIGNMENTS, a); };
+  const updateAssignments = async (a) => { setAssignments(a); await safeSet(STORAGE_KEYS.ASSIGNMENTS, a); if (familyCode) cloudSet(familyCode, a); };
 
   if (loading) return <div style={{ minHeight: '100vh', background: '#faf6ef', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Fraunces, serif', fontSize: '1.5rem', color: '#3a2e26' }}>Chargement...</div>;
 
