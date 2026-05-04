@@ -741,7 +741,7 @@ Le champ "answer" est l'index (0, 1, 2 ou 3) de la bonne réponse.`;
               <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="text-input" min={new Date().toISOString().split('T')[0]} />
               <label className="field-label" style={{ marginTop: '1rem' }}>Nombre de questions du quiz</label>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                {[5, 10, 15, 20, 25].map(n => <button key={n} onClick={() => setNumQuestions(n)} className={`num-pick ${numQuestions === n ? 'active' : ''}`}>{n}</button>)}
+                {[5, 10, 15, 20, 25].map(n => <button key={n} onClick={() => setNumQuestions(n)} className={`num-pick ${numQuestions === n ? 'active' : ''}`}>{n}</button>)}<input type="number" min="1" max="50" value={numQuestions} onChange={(e) => setNumQuestions(Math.min(50, Math.max(1, parseInt(e.target.value) || 1)))} className="text-input" style={{ width: '5rem', padding: '0.5rem', textAlign: 'center' }} />
               </div>
               <label className="field-label" style={{ marginTop: '1rem' }}>Notes pour l'IA (optionnel)</label>
               <textarea value={extraNotes} onChange={(e) => setExtraNotes(e.target.value)} className="text-input" rows={2} placeholder="Ex: Insister sur les verbes irréguliers, niveau 5e..." />
