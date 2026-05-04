@@ -175,7 +175,7 @@ export default function App() {
         {view === 'flashcards' && activeFlashcards && <FlashcardsView cards={activeFlashcards} subject={activeSubject} onBack={() => { setView('subject'); setActiveFlashcards(null); }} />}
         {view === 'stats' && <StatsView stats={stats} onBack={() => setView('home')} />}
         {view === 'assignments' && <AssignmentsView assignments={assignments} parentMode={parentMode} onBack={() => setView('home')} onOpen={(a) => { setActiveAssignment(a); setView('assignment'); }} onUpdateAssignments={updateAssignments} />}
-        {view === 'assignment' && activeAssignment && <AssignmentView assignment={activeAssignment} parentMode={parentMode} onBack={() => { setView('assignments'); setActiveAssignment(null); }} onStartQuiz={(q) => { setActiveQuiz(q); setView('quiz'); }} onDelete={async () => { const na = assignments.filter(a => a.id !== activeAssignment.id); await updateAssignments(na); setView('assignments'); setActiveAssignment(null); }} />}
+        {view === 'assignment' && activeAssignment && <AssignmentView assignment={activeAssignment} onUpdateAssignments={updateAssignments} assignments={assignments} parentMode={parentMode} onBack={() => { setView('assignments'); setActiveAssignment(null); }} onStartQuiz={(q) => { setActiveQuiz(q); setView('quiz'); }} onDelete={async () => { const na = assignments.filter(a => a.id !== activeAssignment.id); await updateAssignments(na); setView('assignments'); setActiveAssignment(null); }} />}
         {view === 'parent-login' && <ParentLogin pinSet={pinSet} onSuccess={() => { setParentMode(true); setView('home'); }} onBack={() => setView('home')} onSetPin={async (p) => { await safeSet(STORAGE_KEYS.PIN, p); setPinSet(true); setParentMode(true); setView('home'); }} />}
               </main>
         {parentMode && (<div style={{ position: 'fixed', bottom: '20px', left: '20px', zIndex: 100, background: 'white', padding: '0.75rem 1rem', borderRadius: '12px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', display: 'flex', gap: '0.5rem', alignItems: 'center', fontSize: '0.85rem', flexWrap: 'wrap', maxWidth: 'calc(100vw - 40px)' }}><span style={{ color: '#6b5544', fontWeight: 600 }}>Code famille:</span><input value={familyCode} onChange={(e) => setFamilyCode(e.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 12))} placeholder="ex: martin2026" style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '0.4rem 0.6rem', fontSize: '0.85rem', width: '140px' }} /><button onClick={async () => { if (familyCode.length < 4) { alert('Code famille: 4 \u00e0 12 caract\u00e8res'); return; } localStorage.setItem(STORAGE_KEYS.FAMILY_CODE, familyCode); const remote = await cloudGet(familyCode, null); if (remote && remote.length > 0) { setAssignments(remote); safeSet(STORAGE_KEYS.ASSIGNMENTS, remote); alert('Code famille enregistr\u00e9 ! ' + remote.length + ' devoir(s) charg\u00e9(s) depuis le cloud.'); } else if (assignments.length > 0) { await cloudSet(familyCode, assignments); alert('Code famille enregistr\u00e9 ! Devoirs locaux pouss\u00e9s sur le cloud.'); } else { alert('Code famille enregistr\u00e9.'); } }} style={{ background: '#c8553d', color: 'white', border: 'none', borderRadius: '8px', padding: '0.4rem 0.8rem', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 600 }}>Enregistrer</button></div>)}
@@ -817,7 +817,7 @@ Le champ "answer" est l'index (0, 1, 2 ou 3) de la bonne réponse.`;
   );
 }
 
-function AssignmentView({ assignment, parentMode, onBack, onStartQuiz, onDelete }) {
+function AssignmentView({ assignment, parentMode, onBack, onStartQuiz, onDelete, onUpdateAssignments, assignments }) {
   const subj = SUBJECTS[assignment.subject]; const Icon = subj?.icon || BookOpen; const days = daysUntil(assignment.dueDate);
   const [showImage, setShowImage] = useState(false);
   return (
@@ -857,7 +857,7 @@ function AssignmentView({ assignment, parentMode, onBack, onStartQuiz, onDelete 
       )}
       {parentMode && (
         <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end' }}>
-          <button onClick={() => { if (confirm('Supprimer ce devoir ?')) onDelete(); }} className="danger-btn"><Trash2 size={14} /> Supprimer ce devoir</button>
+          <button onClick={() => { const next = assignments.map(a => a.id === assignment.id ? { ...a, done: !a.done, doneAt: !a.done ? new Date().toISOString() : null } : a); onUpdateAssignments(next); }} style={{ background: assignment.done ? '#dde5b6' : '#2d5a3d', color: assignment.done ? '#2d5a3d' : '#faf6ef', border: 'none', padding: '0.6rem 1rem', borderRadius: '10px', fontWeight: 600, cursor: 'pointer', marginRight: '0.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}><Check size={14} /> {assignment.done ? 'Marqué fait — Annuler' : 'Marquer comme fait'}</button><button onClick={() => { if (confirm('Supprimer ce devoir ?')) onDelete(); }} className="danger-btn"><Trash2 size={14} /> Supprimer ce devoir</button>
         </div>
       )}
       {showImage && <div className="modal-overlay" onClick={() => setShowImage(false)} style={{ padding: '1rem' }}><img src={assignment.imagePreview} alt="Leçon" style={{ maxWidth: '100%', maxHeight: '95vh', borderRadius: '12px' }} /></div>}
