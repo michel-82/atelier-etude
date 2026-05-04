@@ -79,7 +79,7 @@ const DEFAULT_CONTENT = {
   religion: { quizzes: [], flashcards: [] },
 };
 
-const STORAGE_KEYS = { CONTENT: 'study-app-content-v3', STATS: 'study-app-stats', PIN: 'study-app-pin', ASSIGNMENTS: 'study-app-assignments' };
+const STORAGE_KEYS = { CONTENT: 'study-app-content-v3', STATS: 'study-app-stats', PIN: 'study-app-pin', ASSIGNMENTS: 'study-app-assignments', FAMILY_CODE: 'study-app-family-code' };
 
 const safeGet = async (key, fallback) => {
   try {
@@ -90,6 +90,9 @@ const safeGet = async (key, fallback) => {
 const safeSet = async (key, value) => {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { console.error(e); }
 };
+
+const cloudGet = async (code, fallback) => { if (!code) return fallback; try { const r = await fetch('/api/devoirs?code=' + encodeURIComponent(code)); if (!r.ok) return fallback; const d = await r.json(); return d.assignments || fallback; } catch { return fallback; } };
+const cloudSet = async (code, assignments) => { if (!code) return false; try { const r = await fetch('/api/devoirs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, assignments }) }); return r.ok; } catch { return false; } };
 
 const daysUntil = (dateStr) => {
   if (!dateStr) return null;
