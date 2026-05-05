@@ -625,9 +625,9 @@ function AssignmentCreator({ onClose, onCreate }) {
   const [category, setCategory] = useState('tout');
   const [dueDate, setDueDate] = useState('');
   const [numQuestions, setNumQuestions] = useState(5);
-  const [imageData, setImageData] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
-  const [imageMediaType, setImageMediaType] = useState(null);
+  const [imagesData, setImagesData] = useState([]);
+  const [imagePreviews, setImagePreviews] = useState([]);
+  const MAX_PHOTOS = 8;
   const [extraNotes, setExtraNotes] = useState('');
   const [generating, setGenerating] = useState(false);
   const [generatedQuiz, setGeneratedQuiz] = useState(null);
@@ -636,11 +636,27 @@ function AssignmentCreator({ onClose, onCreate }) {
   const isLanguage = SUBJECTS[subject]?.isLanguage;
 
   const handleFileSelect = (e) => {
-    const file = e.target.files[0]; if (!file) return;
-    if (!file.type.startsWith('image/')) { setError('Veuillez sélectionner une image'); return; }
-    const reader = new FileReader();
-    reader.onload = (ev) => { const dataUrl = ev.target.result; setImagePreview(dataUrl); setImageData(dataUrl.split(',')[1]); setImageMediaType(file.type); setError(''); };
-    reader.readAsDataURL(file);
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    const remaining = MAX_PHOTOS - imagePreviews.length;
+    if (remaining <= 0) { setError('Maximum ' + MAX_PHOTOS + ' photos par devoir.'); e.target.value = ''; return; }
+    const toRead = files.slice(0, remaining).filter(f => f.type.startsWith('image/'));
+    if (toRead.length === 0) { setError('Veuillez sélectionner des images.'); e.target.value = ''; return; }
+    setError('');
+    Promise.all(toRead.map(file => new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = (ev) => { const dataUrl = ev.target.result; resolve({ dataUrl, data: dataUrl.split(',')[1], mediaType: file.type }); };
+      reader.readAsDataURL(file);
+    }))).then(results => {
+      setImagePreviews(prev => [...prev, ...results.map(r => r.dataUrl)]);
+      setImagesData(prev => [...prev, ...results.map(r => ({ data: r.data, mediaType: r.mediaType }))]);
+      if (files.length > remaining) setError('Seules les ' + remaining + ' premières photos ont été ajoutées (max ' + MAX_PHOTOS + ').');
+    });
+    e.target.value = '';
+  };
+  const removeImageAt = (idx) => {
+    setImagePreviews(prev => prev.filter((_, i) => i !== idx));
+    setImagesData(prev => prev.filter((_, i) => i !== idx));
   };
 
   const generateQuiz = async () => {
@@ -686,7 +702,7 @@ Le champ "answer" est l'index (0, 1, 2 ou 3) de la bonne réponse.`;
           model: "claude-sonnet-4-5",
           max_tokens: 2000,
           messages: [{ role: "user", content: [
-            { type: "image", source: { type: "base64", media_type: imageMediaType, data: imageData } },
+            ...imagesData.map(img => ({ type: "image", source: { type: "base64", media_type: img.mediaType, data: img.data } })),
             { type: "text", text: prompt }
           ]}]
         })
@@ -714,7 +730,7 @@ Le champ "answer" est l'index (0, 1, 2 ou 3) de la bonne réponse.`;
       title, subject,
       category: isLanguage ? category : null,
       dueDate: dueDate || null,
-      imagePreview, notes: extraNotes,
+      imagePreviews, notes: extraNotes,
       quiz: generatedQuiz,
       createdAt: new Date().toISOString(),
     });
@@ -765,17 +781,27 @@ Le champ "answer" est l'index (0, 1, 2 ou 3) de la bonne réponse.`;
           {step === 2 && (
             <div>
               <div style={{ marginBottom: '1rem', fontSize: '0.95rem', color: '#6b5544', lineHeight: 1.5 }}>Photographiez la leçon, le cours ou le sujet à étudier. L'IA va lire le contenu et générer automatiquement {numQuestions} questions adaptées{isLanguage && category !== 'tout' ? ` en ${LANGUAGE_CATEGORIES[category].name.toLowerCase()}` : ''}.</div>
-              <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} style={{ display: 'none' }} />
-              {!imagePreview ? (
+              <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleFileSelect} style={{ display: 'none' }} />
+              {imagePreviews.length === 0 ? (
                 <button onClick={() => fileInputRef.current?.click()} className="photo-uploader">
                   <Camera size={36} />
-                  <div style={{ fontFamily: 'Fraunces, serif', fontSize: '1.15rem', fontWeight: 600, marginTop: '0.5rem' }}>Prendre une photo</div>
-                  <div style={{ fontSize: '0.85rem', color: '#8b6f47', marginTop: '0.25rem' }}>ou choisir depuis la galerie</div>
+                  <div style={{ fontFamily: 'Fraunces, serif', fontSize: '1.15rem', fontWeight: 600, marginTop: '0.5rem' }}>Prendre des photos</div>
+                  <div style={{ fontSize: '0.85rem', color: '#8b6f47', marginTop: '0.25rem' }}>ou choisir depuis la galerie (jusqu'à {MAX_PHOTOS})</div>
                 </button>
               ) : (
-                <div className="photo-preview">
-                  <img src={imagePreview} alt="Aperçu" />
-                  <button onClick={() => fileInputRef.current?.click()} className="secondary-btn" style={{ marginTop: '0.75rem' }}><ImageIcon size={14} /> Changer la photo</button>
+                <div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                    {imagePreviews.map((src, i) => (
+                      <div key={i} style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e8ddd0' }}>
+                        <img src={src} alt={'Photo ' + (i+1)} style={{ width: '100%', height: '100px', objectFit: 'cover', display: 'block' }} />
+                        <button onClick={() => removeImageAt(i)} aria-label="Supprimer cette photo" style={{ position: 'absolute', top: '4px', right: '4px', background: 'rgba(58,46,38,0.85)', color: '#fff', border: 'none', borderRadius: '50%', width: '24px', height: '24px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><X size={14} /></button>
+                        <div style={{ position: 'absolute', bottom: '4px', left: '4px', background: 'rgba(58,46,38,0.75)', color: '#fff', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px' }}>{i+1}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {imagePreviews.length < MAX_PHOTOS && (
+                    <button onClick={() => fileInputRef.current?.click()} className="secondary-btn"><Plus size={14} /> Ajouter une photo ({imagePreviews.length}/{MAX_PHOTOS})</button>
+                  )}
                 </div>
               )}
               {error && <div className="error-msg"><AlertCircle size={14} /> {error}</div>}
@@ -804,12 +830,13 @@ Le champ "answer" est l'index (0, 1, 2 ou 3) de la bonne réponse.`;
                   ))}
                 </div>
               ))}
-            </div>
-          )}
-        </div>
-        <div className="modal-footer">
+            <const [showImage, setShowImage] = useState(false);
+  const [lightboxIdx, setLightboxIdx] = useState(0);
+  const allPhotos = Array.isArray(assignment.imagePreviews) && assignment.imagePreviews.length > 0
+    ? assignment.imagePreviews
+    : (assignment.imagePreview ? [assignment.imagePreview] : []);ssName="modal-footer">
           {step === 1 && (<><button onClick={onClose} className="secondary-btn">Annuler</button><button onClick={() => setStep(2)} disabled={!title.trim()} className="primary-btn" style={{ opacity: title.trim() ? 1 : 0.5 }}>Continuer <ChevronRight size={16} /></button></>)}
-          {step === 2 && (<><button onClick={() => setStep(1)} className="secondary-btn">Retour</button><button onClick={generateQuiz} disabled={!imageData || generating} className="primary-btn" style={{ opacity: imageData ? 1 : 0.5 }}><Wand2 size={16} /> Générer le quiz</button></>)}
+          {step === 2 && (<><button onClick={() => setStep(1)} className="secondary-btn">Retour</button><button onClick={generateQuiz} disabled={imagesData.length === 0 || generating} className="primary-btn" style={{ opacity: imagesData.length > 0 ? 1 : 0.5 }}><Wand2 size={16} /> Générer le quiz</button></>)}
           {step === 4 && (<><button onClick={() => { setStep(2); setGeneratedQuiz(null); }} className="secondary-btn"><RotateCcw size={14} /> Régénérer</button><button onClick={finalize} className="primary-btn"><Check size={16} /> Valider le devoir</button></>)}
         </div>
       </div>
@@ -834,12 +861,26 @@ function AssignmentView({ assignment, parentMode, onBack, onStartQuiz, onDelete,
           </div>
         </div>
       </div>
-      {assignment.imagePreview && (
+      {allPhotos.length > 0 && (
         <div style={{ marginBottom: '1.5rem' }}>
-          <button onClick={() => setShowImage(true)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', width: '100%' }}>
-            <img src={assignment.imagePreview} alt="Leçon" style={{ width: '100%', maxHeight: '300px', objectFit: 'cover', borderRadius: '14px', border: '1px solid rgba(58, 46, 38, 0.08)' }} />
-            <div style={{ fontSize: '0.85rem', color: '#8b6f47', marginTop: '0.5rem', textAlign: 'center' }}>Touche pour voir en grand</div>
-          </button>
+          {allPhotos.length === 1 ? (
+            <button onClick={() => { setLightboxIdx(0); setShowImage(true); }} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', width: '100%' }}>
+              <img src={allPhotos[0]} alt="Leçon" style={{ width: '100%', maxHeight: '300px', objectFit: 'cover', borderRadius: '14px', border: '1px solid rgba(58, 46, 38, 0.08)' }} />
+              <div style={{ fontSize: '0.85rem', color: '#8b6f47', marginTop: '0.5rem', textAlign: 'center' }}>Touche pour voir en grand</div>
+            </button>
+          ) : (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.5rem' }}>
+                {allPhotos.map((src, i) => (
+                  <button key={i} onClick={() => { setLightboxIdx(i); setShowImage(true); }} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', position: 'relative', borderRadius: '12px', overflow: 'hidden' }}>
+                    <img src={src} alt={'Leçon ' + (i+1)} style={{ width: '100%', height: '140px', objectFit: 'cover', display: 'block', border: '1px solid rgba(58, 46, 38, 0.08)' }} />
+                    <div style={{ position: 'absolute', bottom: '6px', right: '6px', background: 'rgba(58,46,38,0.75)', color: '#fff', fontSize: '0.75rem', padding: '2px 8px', borderRadius: '10px' }}>{i+1}/{allPhotos.length}</div>
+                  </button>
+                ))}
+              </div>
+              <div style={{ fontSize: '0.85rem', color: '#8b6f47', marginTop: '0.5rem', textAlign: 'center' }}>Touche une photo pour la voir en grand</div>
+            </>
+          )}
         </div>
       )}
       {assignment.notes && (
@@ -859,7 +900,18 @@ function AssignmentView({ assignment, parentMode, onBack, onStartQuiz, onDelete,
           <button onClick={() => { const next = assignments.map(a => a.id === assignment.id ? { ...a, done: !a.done, doneAt: !a.done ? new Date().toISOString() : null } : a); onUpdateAssignments(next); }} style={{ background: assignment.done ? '#dde5b6' : '#2d5a3d', color: assignment.done ? '#2d5a3d' : '#faf6ef', border: 'none', padding: '0.6rem 1rem', borderRadius: '10px', fontWeight: 600, cursor: 'pointer', marginRight: '0.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}><Check size={14} /> {assignment.done ? 'Marqué fait — Annuler' : 'Marquer comme fait'}</button><button onClick={() => { if (confirm('Supprimer ce devoir ?')) onDelete(); }} className="danger-btn"><Trash2 size={14} /> Supprimer ce devoir</button>
         </div>
       )}
-      {showImage && <div className="modal-overlay" onClick={() => setShowImage(false)} style={{ padding: '1rem' }}><img src={assignment.imagePreview} alt="Leçon" style={{ maxWidth: '100%', maxHeight: '95vh', borderRadius: '12px' }} /></div>}
+      {showImage && allPhotos.length > 0 && (
+        <div className="modal-overlay" onClick={() => setShowImage(false)} style={{ padding: '1rem', flexDirection: 'column' }}>
+          <img src={allPhotos[lightboxIdx]} alt={'Leçon ' + (lightboxIdx+1)} style={{ maxWidth: '100%', maxHeight: '85vh', borderRadius: '12px' }} onClick={(e) => e.stopPropagation()} />
+          {allPhotos.length > 1 && (
+            <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '1rem', background: 'rgba(58,46,38,0.85)', padding: '0.5rem 1rem', borderRadius: '999px' }}>
+              <button onClick={() => setLightboxIdx((lightboxIdx - 1 + allPhotos.length) % allPhotos.length)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: '0.25rem 0.5rem', fontSize: '1.25rem' }}>‹</button>
+              <span style={{ color: '#fff', fontSize: '0.9rem' }}>{lightboxIdx + 1} / {allPhotos.length}</span>
+              <button onClick={() => setLightboxIdx((lightboxIdx + 1) % allPhotos.length)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: '0.25rem 0.5rem', fontSize: '1.25rem' }}>›</button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
