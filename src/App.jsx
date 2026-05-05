@@ -830,11 +830,10 @@ Le champ "answer" est l'index (0, 1, 2 ou 3) de la bonne réponse.`;
                   ))}
                 </div>
               ))}
-            <const [showImage, setShowImage] = useState(false);
-  const [lightboxIdx, setLightboxIdx] = useState(0);
-  const allPhotos = Array.isArray(assignment.imagePreviews) && assignment.imagePreviews.length > 0
-    ? assignment.imagePreviews
-    : (assignment.imagePreview ? [assignment.imagePreview] : []);ssName="modal-footer">
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
           {step === 1 && (<><button onClick={onClose} className="secondary-btn">Annuler</button><button onClick={() => setStep(2)} disabled={!title.trim()} className="primary-btn" style={{ opacity: title.trim() ? 1 : 0.5 }}>Continuer <ChevronRight size={16} /></button></>)}
           {step === 2 && (<><button onClick={() => setStep(1)} className="secondary-btn">Retour</button><button onClick={generateQuiz} disabled={imagesData.length === 0 || generating} className="primary-btn" style={{ opacity: imagesData.length > 0 ? 1 : 0.5 }}><Wand2 size={16} /> Générer le quiz</button></>)}
           {step === 4 && (<><button onClick={() => { setStep(2); setGeneratedQuiz(null); }} className="secondary-btn"><RotateCcw size={14} /> Régénérer</button><button onClick={finalize} className="primary-btn"><Check size={16} /> Valider le devoir</button></>)}
@@ -847,6 +846,10 @@ Le champ "answer" est l'index (0, 1, 2 ou 3) de la bonne réponse.`;
 function AssignmentView({ assignment, parentMode, onBack, onStartQuiz, onDelete, onUpdateAssignments, assignments }) {
   const subj = SUBJECTS[assignment.subject]; const Icon = subj?.icon || BookOpen; const days = daysUntil(assignment.dueDate);
   const [showImage, setShowImage] = useState(false);
+  const [lightboxIdx, setLightboxIdx] = useState(0);
+  const allPhotos = Array.isArray(assignment.imagePreviews) && assignment.imagePreviews.length > 0
+    ? assignment.imagePreviews
+    : (assignment.imagePreview ? [assignment.imagePreview] : []);
   return (
     <div className="fade-in">
       <button onClick={onBack} className="back-btn"><ArrowLeft size={16} /> Retour aux devoirs</button>
