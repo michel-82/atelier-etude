@@ -700,7 +700,7 @@ Le champ "answer" est l'index (0, 1, 2 ou 3) de la bonne réponse.`;
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "claude-sonnet-4-5",
-          max_tokens: 2000,
+          max_tokens: Math.min(16000, 600 + numQuestions * 250),
           messages: [{ role: "user", content: [
             ...imagesData.map(img => ({ type: "image", source: { type: "base64", media_type: img.mediaType, data: img.data } })),
             { type: "text", text: prompt }
