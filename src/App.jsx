@@ -7,7 +7,7 @@ const SUBJECTS = {
   sciences: { name: 'Sciences', icon: FlaskConical, color: '#4a6fa5', accent: '#d4e0f0', isLanguage: false },
   anglais: { name: 'Anglais', icon: Languages, color: '#8b5a3c', accent: '#e8d5c4', isLanguage: true },
   allemand: { name: 'Allemand', icon: Languages, color: '#5d4e37', accent: '#e0d8c3', isLanguage: true },
-  histoire: { name: 'Histoire', icon: Landmark, colohr: '#7a4a3a', accent: '#ead5c8', isLanguage: false },
+  histoire: { name: 'Histoire', icon: Landmark, colohr: '#7a4ha3a', accent: '#ead5c8', isLanguage: false },
   geographie: { name: 'Géographie', icon: Globe, color: '#3d6b8a', accent: '#cfdde8', isLanguage: false },
   religion: { name: 'Religion', icon: Cross, color: '#6b4a7a', accent: '#dccfe5', isLanguage: false },
 };
@@ -114,7 +114,7 @@ export default function App() {
   const [familyCode, setFamilyCode] = useState('');
   const [parentMode, setParentMode] = useState(false);
   const [pinSet, setPinSet] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); const [showFamilyMenu, setShowFamilyMenu] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -131,7 +131,7 @@ export default function App() {
   useEffect(() => {
     const code = localStorage.getItem(STORAGE_KEYS.FAMILY_CODE) || '';
     setFamilyCode(code);
-    const refresh = async () => { if (!code) return; const remote = await cloudGet(code, null); if (remote) { setAssignments(remote); safeSet(STORAGE_KEYS.ASSIGNMENTS, remote); } };
+    const refresh = async () => { if (!code) return; const remote = await cloudGet(code, null); if (remote && remote.length > 0) { setAssignments(remote); safeSet(STORAGE_KEYS.ASSIGNMENTS, remote); } };
     refresh();
     const onVis = () => { if (document.visibilityState === 'visible') refresh(); };
     document.addEventListener('visibilitychange', onVis);
@@ -156,7 +156,7 @@ export default function App() {
             <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: 'linear-gradient(135deg, #c8553d, #8b3a26)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Sparkles size={20} color="#faf6ef" /></div>
             <div style={{ fontFamily: 'Fraunces, serif', fontSize: '1.4rem', fontWeight: 600, letterSpacing: '-0.02em' }}>L'Atelier d'Étude</div>
           </button>
-          {parentMode ? <button onClick={() => setParentMode(false)} className="parent-badge active"><LogOut size={14} /> Mode parent</button> : <button onClick={() => setView('parent-login')} className="parent-badge"><Lock size={14} /> Mode parent</button>}
+          {parentMode ? <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}><button onClick={() => setShowFamilyMenu(true)} className="parent-badge" title="Code famille">⚙️</button><button onClick={() => setParentMode(false)} className="parent-badge active"><LogOut size={14} /> Mode parent</button></div> : <button onClick={() => setView('parent-login')} className="parent-badge"><Lock size={14} /> Mode parent</button>}
         </div>
       </header>
       <main className="max-w-6xl" style={{ padding: '2rem 1.25rem', position: 'relative', zIndex: 1 }}>
@@ -178,7 +178,7 @@ export default function App() {
         {view === 'assignment' && activeAssignment && <AssignmentView assignment={activeAssignment} onUpdateAssignments={updateAssignments} assignments={assignments} parentMode={parentMode} onBack={() => { setView('assignments'); setActiveAssignment(null); }} onStartQuiz={(q) => { setActiveQuiz(q); setView('quiz'); }} onDelete={async () => { const na = assignments.filter(a => a.id !== activeAssignment.id); await updateAssignments(na); setView('assignments'); setActiveAssignment(null); }} />}
         {view === 'parent-login' && <ParentLogin pinSet={pinSet} onSuccess={() => { setParentMode(true); setView('home'); }} onBack={() => setView('home')} onSetPin={async (p) => { await safeSet(STORAGE_KEYS.PIN, p); setPinSet(true); setParentMode(true); setView('home'); }} />}
               </main>
-        {parentMode && (<div style={{ position: 'fixed', bottom: '20px', left: '20px', zIndex: 100, background: 'white', padding: '0.75rem 1rem', borderRadius: '12px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', display: 'flex', gap: '0.5rem', alignItems: 'center', fontSize: '0.85rem', flexWrap: 'wrap', maxWidth: 'calc(100vw - 40px)' }}><span style={{ color: '#6b5544', fontWeight: 600 }}>Code famille:</span><input value={familyCode} onChange={(e) => setFamilyCode(e.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 12))} placeholder="ex: martin2026" style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '0.4rem 0.6rem', fontSize: '0.85rem', width: '140px' }} /><button onClick={async () => { if (familyCode.length < 4) { alert('Code famille: 4 \u00e0 12 caract\u00e8res'); return; } localStorage.setItem(STORAGE_KEYS.FAMILY_CODE, familyCode); const remote = await cloudGet(familyCode, null); if (remote && remote.length > 0) { setAssignments(remote); safeSet(STORAGE_KEYS.ASSIGNMENTS, remote); alert('Code famille enregistr\u00e9 ! ' + remote.length + ' devoir(s) charg\u00e9(s) depuis le cloud.'); } else if (assignments.length > 0) { await cloudSet(familyCode, assignments); alert('Code famille enregistr\u00e9 ! Devoirs locaux pouss\u00e9s sur le cloud.'); } else { alert('Code famille enregistr\u00e9.'); } }} style={{ background: '#c8553d', color: 'white', border: 'none', borderRadius: '8px', padding: '0.4rem 0.8rem', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 600 }}>Enregistrer</button></div>)}
+        {parentMode && showFamilyMenu && (<div onClick={() => setShowFamilyMenu(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(58, 46, 38, 0.4)', backdropFilter: 'blur(8px)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}><div onClick={(e) => e.stopPropagation()} style={{ background: 'white', padding: '1.5rem', borderRadius: '16px', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '400px', width: '100%' }}><div style={{ fontFamily: 'Fraunces, serif', fontSize: '1.2rem', fontWeight: 600, marginBottom: '0.25rem' }}>Code famille</div><span style={{ color: '#6b5544', fontWeight: 600 }}>Code famille:</span><input value={familyCode} onChange={(e) => setFamilyCode(e.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 12))} placeholder="ex: martin2026" style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '0.4rem 0.6rem', fontSize: '0.85rem', width: '140px' }} /><button onClick={async () => { if (familyCode.length < 4) { alert('Code famille: 4 \u00e0 12 caract\u00e8res'); return; } localStorage.setItem(STORAGE_KEYS.FAMILY_CODE, familyCode); const remote = await cloudGet(familyCode, null); if (remote && remote.length > 0) { setAssignments(remote); safeSet(STORAGE_KEYS.ASSIGNMENTS, remote); alert('Code famille enregistr\u00e9 ! ' + remote.length + ' devoir(s) charg\u00e9(s) depuis le cloud.'); } else if (assignments.length > 0) { await cloudSet(familyCode, assignments); alert('Code famille enregistr\u00e9 ! Devoirs locaux pouss\u00e9s sur le cloud.'); } else { alert('Code famille enregistr\u00e9.'); } }} style={{ background: '#c8553d', color: 'white', border: 'none', borderRadius: '8px', padding: '0.4rem 0.8rem', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 600 }}>Enregistrer</button></div></div>)}
         <Styles />
     </div>
   );
@@ -765,7 +765,7 @@ Le champ "answer" est l'index (0, 1, 2 ou 3) de la bonne réponse.`;
           {step === 2 && (
             <div>
               <div style={{ marginBottom: '1rem', fontSize: '0.95rem', color: '#6b5544', lineHeight: 1.5 }}>Photographiez la leçon, le cours ou le sujet à étudier. L'IA va lire le contenu et générer automatiquement {numQuestions} questions adaptées{isLanguage && category !== 'tout' ? ` en ${LANGUAGE_CATEGORIES[category].name.toLowerCase()}` : ''}.</div>
-              <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleFileSelect} style={{ display: 'none' }} />
+              <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} style={{ display: 'none' }} />
               {!imagePreview ? (
                 <button onClick={() => fileInputRef.current?.click()} className="photo-uploader">
                   <Camera size={36} />
