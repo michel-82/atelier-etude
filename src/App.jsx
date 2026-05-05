@@ -92,7 +92,7 @@ const safeSet = async (key, value) => {
 };
 
 const cloudGet = async (code, fallback) => { if (!code) return fallback; try { const r = await fetch('/api/devoirs?code=' + encodeURIComponent(code)); if (!r.ok) return fallback; const d = await r.json(); return d.assignments || fallback; } catch { return fallback; } };
-const cloudSet = async (code, assignments) => { if (!code) return false; try { const r = await fetch('/api/devoirs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, assignments }) }); return r.ok; } catch { return false; } };
+const cloudSet = async (code, assignments) => { if (!code) return false; try { const r = await fetch('/api/devoirs?code=' + encodeURIComponent(code), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assignments }) }); return r.ok; } catch { return false; } };
 
 const daysUntil = (dateStr) => {
   if (!dateStr) return null;
