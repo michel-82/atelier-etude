@@ -710,8 +710,35 @@ Le champ "answer" est l'index (0, 1, 2 ou 3) de la bonne réponse.`;
       if (!response.ok) throw new Error(`Erreur API : ${response.status}`);
       const data = await response.json();
       const text = data.content.map(i => i.text || "").join("\n").trim();
-      const clean = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-      const parsed = JSON.parse(clean);
+      let clean = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+      // Tenter d'extraire le bloc JSON principal s'il est entoure de texte explicatif
+      const jsonStart = clean.indexOf('{');
+      const jsonEnd = clean.lastIndexOf('}');
+      if (jsonStart >= 0 && jsonEnd > jsonStart) clean = clean.substring(jsonStart, jsonEnd + 1);
+      // Supprimer caracteres de controle (sauf \t \n \r) qui peuvent casser JSON.parse
+      clean = clean.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+      let parsed;
+      try {
+        parsed = JSON.parse(clean);
+      } catch (parseErr) {
+        console.warn('JSON.parse failed, trying recovery. Raw text:', text);
+        console.warn('Cleaned text:', clean);
+        // Tenter de recuperer les questions une par une via regex tolerante
+        const recovered = [];
+        const qRegex = /\{\s*"q"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*"choices"\s*:\s*(\[(?:[^\[\]]|\[[^\]]*\])*\])\s*,\s*"answer"\s*:\s*(\d)/g;
+        let mm;
+        while ((mm = qRegex.exec(clean)) !== null) {
+          try {
+            const choices = JSON.parse(mm[2]);
+            if (Array.isArray(choices) && choices.length === 4) {
+              recovered.push({ q: JSON.parse('"' + mm[1] + '"'), choices, answer: parseInt(mm[3], 10) });
+            }
+          } catch {}
+        }
+        if (recovered.length === 0) throw parseErr;
+        console.warn('Recovered ' + recovered.length + ' questions despite parse error');
+        parsed = { title: 'Quiz', questions: recovered };
+      }
       if (!parsed.questions || !Array.isArray(parsed.questions) || parsed.questions.length === 0) throw new Error('Format de réponse invalide');
       const validQuestions = parsed.questions.filter(q => q.q && Array.isArray(q.choices) && q.choices.length === 4 && typeof q.answer === 'number' && q.answer >= 0 && q.answer <= 3);
       if (validQuestions.length === 0) throw new Error('Aucune question valide générée');
