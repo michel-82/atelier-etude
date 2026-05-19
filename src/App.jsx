@@ -115,6 +115,10 @@ export default function App() {
   const [parentMode, setParentMode] = useState(false);
   const [pinSet, setPinSet] = useState(false);
   const [loading, setLoading] = useState(true); const [showFamilyMenu, setShowFamilyMenu] = useState(false);
+const [saveStatus, setSaveStatus] = useState('');
+const [loadStatus, setLoadStatus] = useState('');
+const [conflictItems, setConflictItems] = useState(null);
+const [conflictChoices, setConflictChoices] = useState({});
 
   useEffect(() => {
     (async () => {
@@ -129,20 +133,76 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const code = localStorage.getItem(STORAGE_KEYS.FAMILY_CODE) || '';
-    setFamilyCode(code);
-    const refresh = async () => { if (!code) return; const remote = await cloudGet(code, null); if (remote && remote.length > 0) { setAssignments(remote); safeSet(STORAGE_KEYS.ASSIGNMENTS, remote); } };
-    refresh();
-    const onVis = () => { if (document.visibilityState === 'visible') refresh(); };
-    document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
-  }, []);
+const code = localStorage.getItem(STORAGE_KEYS.FAMILY_CODE) || '';
+setFamilyCode(code);
+}, []);
 
   const updateContent = async (c) => { setContent(c); await safeSet(STORAGE_KEYS.CONTENT, c); };
   const updateStats = async (s) => { setStats(s); await safeSet(STORAGE_KEYS.STATS, s); };
-  const updateAssignments = async (a) => { setAssignments(a); await safeSet(STORAGE_KEYS.ASSIGNMENTS, a); if (familyCode) cloudSet(familyCode, a); };
+  const updateAssignments = async (a) => { setAssignments(a); await safeSet(STORAGE_KEYS.ASSIGNMENTS, a); };
 
-  if (loading) return <div style={{ minHeight: '100vh', background: '#faf6ef', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Fraunces, serif', fontSize: '1.5rem', color: '#3a2e26' }}>Chargement...</div>;
+  
+const handleManualSave = async () => {
+  if (!familyCode) { alert('Veuillez d\'abord configurer un code famille (icône ⚙️).'); return; }
+  if (!confirm('Sauvegarder ' + assignments.length + ' devoir(s) dans le cloud ? Cela remplacera la version en ligne.')) return;
+  setSaveStatus('saving');
+  const ok = await cloudSet(familyCode, assignments);
+  setSaveStatus(ok ? 'success' : 'error');
+  setTimeout(() => setSaveStatus(''), 3000);
+};
+
+const handleManualLoad = async () => {
+  if (!familyCode) { alert('Veuillez d\'abord configurer un code famille (icône ⚙️).'); return; }
+  setLoadStatus('loading');
+  const remote = await cloudGet(familyCode, null);
+  if (remote === null) { setLoadStatus('error'); setTimeout(() => setLoadStatus(''), 3000); return; }
+  setAssignments(remote);
+  await safeSet(STORAGE_KEYS.ASSIGNMENTS, remote);
+  setLoadStatus('success');
+  setTimeout(() => setLoadStatus(''), 3000);
+};
+
+const handleParentModeOn = async () => {
+  setParentMode(true);
+  setView('home');
+  // Chargement auto silencieux du cloud + détection des conflits
+  if (!familyCode) return;
+  const remote = await cloudGet(familyCode, null);
+  if (remote === null) return;
+  const remoteTitles = new Set(remote.map(a => (a.title || '').trim().toLowerCase()));
+  const localOnly = assignments.filter(a => !remoteTitles.has((a.title || '').trim().toLowerCase()));
+  if (localOnly.length === 0) {
+    // Aucun conflit : on remplace simplement le local par le cloud
+    setAssignments(remote);
+    await safeSet(STORAGE_KEYS.ASSIGNMENTS, remote);
+    return;
+  }
+  // Préparer la modale de réconciliation
+  const initialChoices = {};
+  localOnly.forEach(a => { initialChoices[a.id] = true; });
+  setConflictChoices(initialChoices);
+  setConflictItems({ remote, localOnly });
+};
+
+const applyConflictResolution = async () => {
+  if (!conflictItems) return;
+  const kept = conflictItems.localOnly.filter(a => conflictChoices[a.id]);
+  const merged = [...conflictItems.remote, ...kept];
+  setAssignments(merged);
+  await safeSet(STORAGE_KEYS.ASSIGNMENTS, merged);
+  setConflictItems(null);
+  setConflictChoices({});
+};
+
+const ignoreConflict = async () => {
+  if (!conflictItems) return;
+  setAssignments(conflictItems.remote);
+  await safeSet(STORAGE_KEYS.ASSIGNMENTS, conflictItems.remote);
+  setConflictItems(null);
+  setConflictChoices({});
+};
+
+if (loading) return <div style={{ minHeight: '100vh', background: '#faf6ef', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Fraunces, serif', fontSize: '1.5rem', color: '#3a2e26' }}>Chargement...</div>;
 
   const goHome = () => { setView('home'); setActiveSubject(null); setActiveQuiz(null); setActiveFlashcards(null); setActiveAssignment(null); };
 
@@ -160,7 +220,7 @@ export default function App() {
         </div>
       </header>
       <main className="max-w-6xl" style={{ padding: '2rem 1.25rem', position: 'relative', zIndex: 1 }}>
-        {view === 'home' && <HomeView stats={stats} content={content} assignments={assignments} onSelectSubject={(s) => { setActiveSubject(s); setView('subject'); }} onStats={() => setView('stats')} onAssignments={() => setView('assignments')} parentMode={parentMode} onOpenAssignment={(a) => { setActiveAssignment(a); setView('assignment'); }} />}
+        {view === 'home' && <HomeView stats={stats} content={content} assignments={assignments} onSelectSubject={(s) => { setActiveSubject(s); setView('subject'); }} onStats={() => setView('stats')} onAssignments={() => setView('assignments')} parentMode={parentMode} onOpenAssignment={(a) => { setActiveAssignment(a); setView('assignment'); }} familyCode={familyCode} saveStatus={saveStatus} loadStatus={loadStatus} onSave={handleManualSave} onLoad={handleManualLoad} />}
         {view === 'subject' && activeSubject && <SubjectView subject={activeSubject} content={content[activeSubject]} parentMode={parentMode} onBack={() => { setView('home'); setActiveSubject(null); }} onStartQuiz={(q) => { setActiveQuiz(q); setView('quiz'); }} onStartFlashcards={(s) => { setActiveFlashcards(s); setView('flashcards'); }} onUpdateContent={(u) => updateContent({ ...content, [activeSubject]: u })} />}
         {view === 'quiz' && activeQuiz && <QuizView quiz={activeQuiz} subject={activeSubject || activeAssignment?.subject} onFinish={async (correct, total) => {
           const sk = activeSubject || activeAssignment?.subject;
@@ -176,15 +236,47 @@ export default function App() {
         {view === 'stats' && <StatsView stats={stats} onBack={() => setView('home')} />}
         {view === 'assignments' && <AssignmentsView assignments={assignments} parentMode={parentMode} onBack={() => setView('home')} onOpen={(a) => { setActiveAssignment(a); setView('assignment'); }} onUpdateAssignments={updateAssignments} />}
         {view === 'assignment' && activeAssignment && <AssignmentView assignment={activeAssignment} onUpdateAssignments={updateAssignments} assignments={assignments} parentMode={parentMode} onBack={() => { setView('assignments'); setActiveAssignment(null); }} onStartQuiz={(q) => { setActiveQuiz(q); setView('quiz'); }} onDelete={async () => { const na = assignments.filter(a => a.id !== activeAssignment.id); await updateAssignments(na); setView('assignments'); setActiveAssignment(null); }} />}
-        {view === 'parent-login' && <ParentLogin pinSet={pinSet} onSuccess={() => { setParentMode(true); setView('home'); }} onBack={() => setView('home')} onSetPin={async (p) => { await safeSet(STORAGE_KEYS.PIN, p); setPinSet(true); setParentMode(true); setView('home'); }} />}
+        {view === 'parent-login' && <ParentLogin pinSet={pinSet} onSuccess={() => { handleParentModeOn(); }} onBack={() => setView('home')} onSetPin={async (p) => { await safeSet(STORAGE_KEYS.PIN, p); setPinSet(true); handleParentModeOn(); }} />}
               </main>
         {parentMode && showFamilyMenu && (<div onClick={() => setShowFamilyMenu(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(58, 46, 38, 0.4)', backdropFilter: 'blur(8px)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}><div onClick={(e) => e.stopPropagation()} style={{ background: 'white', padding: '1.5rem', borderRadius: '16px', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '400px', width: '100%' }}><div style={{ fontFamily: 'Fraunces, serif', fontSize: '1.2rem', fontWeight: 600, marginBottom: '0.25rem' }}>Code famille</div><span style={{ color: '#6b5544', fontWeight: 600 }}>Code famille:</span><input value={familyCode} onChange={(e) => setFamilyCode(e.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 12))} placeholder="ex: martin2026" style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '0.4rem 0.6rem', fontSize: '0.85rem', width: '140px' }} /><button onClick={async () => { if (familyCode.length < 4) { alert('Code famille: 4 \u00e0 12 caract\u00e8res'); return; } localStorage.setItem(STORAGE_KEYS.FAMILY_CODE, familyCode); const remote = await cloudGet(familyCode, null); if (remote && remote.length > 0) { setAssignments(remote); safeSet(STORAGE_KEYS.ASSIGNMENTS, remote); alert('Code famille enregistr\u00e9 ! ' + remote.length + ' devoir(s) charg\u00e9(s) depuis le cloud.'); } else if (assignments.length > 0) { await cloudSet(familyCode, assignments); alert('Code famille enregistr\u00e9 ! Devoirs locaux pouss\u00e9s sur le cloud.'); } else { alert('Code famille enregistr\u00e9.'); } }} style={{ background: '#c8553d', color: 'white', border: 'none', borderRadius: '8px', padding: '0.4rem 0.8rem', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 600 }}>Enregistrer</button></div></div>)}
-        <Styles />
+        {conflictItems && (
+<div className="modal-overlay" onClick={() => {}}>
+<div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+<div className="modal-header">
+<h2 style={{ fontFamily: 'Fraunces, serif', fontSize: '1.3rem', fontWeight: 600 }}>Devoirs locaux non synchronisés</h2>
+</div>
+<div className="modal-body">
+<div style={{ marginBottom: '1rem', fontSize: '0.95rem', color: '#6b5544', lineHeight: 1.5 }}>
+Ces devoirs existent sur cet appareil mais pas dans le cloud. Cochez ceux à conserver lors du chargement (les décochés seront supprimés sur cet appareil).
+</div>
+<div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+{conflictItems.localOnly.map(a => {
+const subj = SUBJECTS[a.subject];
+return (
+<label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', background: '#fff', borderRadius: '10px', border: '1px solid rgba(58,46,38,0.08)', cursor: 'pointer' }}>
+<input type="checkbox" checked={!!conflictChoices[a.id]} onChange={(e) => setConflictChoices({ ...conflictChoices, [a.id]: e.target.checked })} style={{ width: '18px', height: '18px', cursor: 'pointer' }} />
+<div style={{ flex: 1 }}>
+<div style={{ fontWeight: 600 }}>{a.title}</div>
+<div style={{ fontSize: '0.82rem', color: '#8b6f47' }}>{subj?.name || a.subject}{a.dueDate ? ' · ' + formatDateShort(a.dueDate) : ''}</div>
+</div>
+</label>
+);
+})}
+</div>
+</div>
+<div className="modal-footer">
+<button onClick={ignoreConflict} className="secondary-btn">Tout ignorer</button>
+<button onClick={applyConflictResolution} className="primary-btn">Appliquer</button>
+</div>
+</div>
+</div>
+)}
+<Styles />
     </div>
   );
 }
 
-function HomeView({ stats, content, assignments, onSelectSubject, onStats, onAssignments, parentMode, onOpenAssignment }) {
+function HomeView({ stats, content, assignments, onSelectSubject, onStats, onAssignments, parentMode, onOpenAssignment, familyCode, saveStatus, loadStatus, onSave, onLoad }) {
   const accuracy = stats.totalAnswers > 0 ? Math.round((stats.correctAnswers / stats.totalAnswers) * 100) : 0;
   const upcoming = assignments.filter(a => { const d = daysUntil(a.dueDate); return d !== null && d >= 0 && d <= 7; }).sort((a, b) => daysUntil(a.dueDate) - daysUntil(b.dueDate)).slice(0, 3);
   return (
@@ -194,6 +286,23 @@ function HomeView({ stats, content, assignments, onSelectSubject, onStats, onAss
         <h1 style={{ fontFamily: 'Fraunces, serif', fontSize: 'clamp(2.5rem, 6vw, 4rem)', fontWeight: 600, lineHeight: 1.05, letterSpacing: '-0.03em', marginBottom: '1rem' }}>Apprendre,<br /><span style={{ fontStyle: 'italic', color: '#c8553d' }}>jour après jour</span>.</h1>
         <p style={{ fontSize: '1.05rem', color: '#6b5544', maxWidth: '540px', lineHeight: 1.6 }}>{parentMode ? "Mode parent activé. Ajoutez des devoirs en photographiant les leçons." : "Choisis un devoir à préparer ou révise une matière."}</p>
       </section>
+<section style={{ marginBottom: '1.5rem' }}>
+  {parentMode ? (
+    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+      <button onClick={onSave} className="primary-btn" style={{ background: '#2d5a3d' }} disabled={saveStatus === 'saving'}>
+        {saveStatus === 'saving' ? '⏳ Sauvegarde...' : saveStatus === 'success' ? '✓ Sauvegardé !' : saveStatus === 'error' ? '✗ Erreur' : '💾 Sauvegarder dans le cloud'}
+      </button>
+      {!familyCode && <span style={{ fontSize: '0.85rem', color: '#c8553d' }}>⚠️ Configurez un code famille (⚙️)</span>}
+    </div>
+  ) : (
+    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+      <button onClick={onLoad} className="primary-btn" style={{ background: '#4a6fa5' }} disabled={loadStatus === 'loading'}>
+        {loadStatus === 'loading' ? '⏳ Chargement...' : loadStatus === 'success' ? '✓ À jour !' : loadStatus === 'error' ? '✗ Erreur' : '⬇️ Charger les nouveaux devoirs'}
+      </button>
+    </div>
+  )}
+</section>
+
       <section style={{ marginBottom: '2.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
           <h2 style={{ fontFamily: 'Fraunces, serif', fontSize: '1.5rem', fontWeight: 600, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Calendar size={22} /> Devoirs à venir</h2>
