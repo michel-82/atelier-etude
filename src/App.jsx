@@ -92,7 +92,62 @@ const safeSet = async (key, value) => {
 };
 
 const cloudGet = async (code, fallback) => { if (!code) return fallback; try { const r = await fetch('/api/devoirs?code=' + encodeURIComponent(code)); if (!r.ok) return fallback; const d = await r.json(); return d.assignments || fallback; } catch { return fallback; } };
-const cloudSet = async (code, assignments) => { if (!code) return false; try { const r = await fetch('/api/devoirs?code=' + encodeURIComponent(code), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assignments }) }); return r.ok; } catch { return false; } };
+const cloudSet = async (code, assignments) => {
+  if (!code) return { ok: false, error: 'Code famille manquant' };
+  try {
+    const body = JSON.stringify({ assignments });
+    const r = await fetch('/api/devoirs?code=' + encodeURIComponent(code), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body
+    });
+    if (!r.ok) {
+      let msg = '';
+      try { msg = await r.text(); } catch {}
+      return { ok: false, status: r.status, error: 'HTTP ' + r.status + (msg ? ': ' + msg.substring(0, 200) : ''), size: body.length };
+    }
+    return { ok: true, status: r.status, size: body.length };
+  } catch (e) {
+    return { ok: false, error: e.message || 'Erreur réseau' };
+  }
+};
+
+// Compresse une dataURL d'image en JPEG (max 1280px, qualité 0.75)
+const compressDataUrl = (dataUrl, maxDim = 1280, quality = 0.75) => new Promise((resolve) => {
+  try {
+    const img = new Image();
+    img.onload = () => {
+      let { width: w, height: h } = img;
+      if (w > maxDim || h > maxDim) {
+        if (w >= h) { h = Math.round(h * maxDim / w); w = maxDim; }
+        else { w = Math.round(w * maxDim / h); h = maxDim; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      try { resolve(canvas.toDataURL('image/jpeg', quality)); }
+      catch { resolve(dataUrl); }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  } catch { resolve(dataUrl); }
+});
+
+const compressAssignmentsPhotos = async (list) => {
+  const out = [];
+  for (const a of list) {
+    const copy = { ...a };
+    if (Array.isArray(a.imagePreviews) && a.imagePreviews.length > 0) {
+      copy.imagePreviews = await Promise.all(a.imagePreviews.map(p => p && p.length > 200000 ? compressDataUrl(p) : Promise.resolve(p)));
+    }
+    if (a.imagePreview && a.imagePreview.length > 200000) {
+      copy.imagePreview = await compressDataUrl(a.imagePreview);
+    }
+    out.push(copy);
+  }
+  return out;
+};
 
 const daysUntil = (dateStr) => {
   if (!dateStr) return null;
@@ -146,9 +201,24 @@ const handleManualSave = async () => {
   if (!familyCode) { alert('Veuillez d\'abord configurer un code famille (icône ⚙️).'); return; }
   if (!confirm('Sauvegarder ' + assignments.length + ' devoir(s) dans le cloud ? Cela remplacera la version en ligne.')) return;
   setSaveStatus('saving');
-  const ok = await cloudSet(familyCode, assignments);
-  setSaveStatus(ok ? 'success' : 'error');
-  setTimeout(() => setSaveStatus(''), 3000);
+  // Compresser les photos volumineuses avant l'envoi
+  let toSend = assignments;
+  try { toSend = await compressAssignmentsPhotos(assignments); } catch {}
+  // Mettre à jour le local avec les versions compressées (pour ne pas refaire le travail à chaque fois)
+  if (toSend !== assignments) {
+    setAssignments(toSend);
+    await safeSet(STORAGE_KEYS.ASSIGNMENTS, toSend);
+  }
+  const result = await cloudSet(familyCode, toSend);
+  if (result.ok) {
+    setSaveStatus('success');
+    setTimeout(() => setSaveStatus(''), 3000);
+  } else {
+    setSaveStatus('error');
+    const sizeMB = result.size ? (result.size / 1024 / 1024).toFixed(2) + ' Mo' : '?';
+    alert('Échec de la sauvegarde.\n' + (result.error || 'Erreur inconnue') + '\nTaille du payload : ' + sizeMB);
+    setTimeout(() => setSaveStatus(''), 3000);
+  }
 };
 
 const handleManualLoad = async () => {
@@ -753,14 +823,21 @@ function AssignmentCreator({ onClose, onCreate }) {
     if (toRead.length === 0) { setError('Veuillez sélectionner des images.'); e.target.value = ''; return; }
     setError('');
     Promise.all(toRead.map(file => new Promise(resolve => {
-      const reader = new FileReader();
-      reader.onload = (ev) => { const dataUrl = ev.target.result; resolve({ dataUrl, data: dataUrl.split(',')[1], mediaType: file.type }); };
-      reader.readAsDataURL(file);
-    }))).then(results => {
-      setImagePreviews(prev => [...prev, ...results.map(r => r.dataUrl)]);
-      setImagesData(prev => [...prev, ...results.map(r => ({ data: r.data, mediaType: r.mediaType }))]);
-      if (files.length > remaining) setError('Seules les ' + remaining + ' premières photos ont été ajoutées (max ' + MAX_PHOTOS + ').');
-    });
+const reader = new FileReader();
+reader.onload = async (ev) => {
+  let dataUrl = ev.target.result;
+  // Compression automatique pour réduire la taille (max 1280px, qualité 0.75)
+  if (dataUrl && dataUrl.length > 200000) {
+    try { dataUrl = await compressDataUrl(dataUrl); } catch {}
+  }
+  resolve({ dataUrl, data: dataUrl.split(',')[1], mediaType: 'image/jpeg' });
+};
+reader.readAsDataURL(file);
+}))).then(results => {
+setImagePreviews(prev => [...prev, ...results.map(r => r.dataUrl)]);
+setImagesData(prev => [...prev, ...results.map(r => ({ data: r.data, mediaType: r.mediaType }))]);
+if (files.length > remaining) setError('Seules les ' + remaining + ' premières photos ont été ajoutées (max ' + MAX_PHOTOS + ').');
+});
     e.target.value = '';
   };
   const removeImageAt = (idx) => {
